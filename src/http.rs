@@ -50,7 +50,7 @@ fn handle_connection(mut stream: TcpStream) {
             content_type = content_type,
             length = length
         );
-
+        println!("{}",response);
         // Write the response headers
         stream.write_all(response.as_bytes()).unwrap();
 
