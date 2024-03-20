@@ -28,6 +28,7 @@ pub fn format(req: String) -> Request {
     }
     //Path
     let mut path_parts: Vec<&str> = parts[1].split("?").collect();
+
     if path_parts.len() > 0 {
         result.path = path_parts[0].to_string();
 
@@ -39,6 +40,9 @@ pub fn format(req: String) -> Request {
             let params_vec: Vec<&str> = params_string.split("&").collect();
             for param in params_vec.iter() {
                 let sides: Vec<&str> = param.split("=").collect();
+                if sides.len() != 2 {
+                    break;
+                }
                 params.push(Param {
                     name: sides[0].to_string(),
                     value: sides[1].to_string(),

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Route {
     pub path: String,
+    pub content_type: String,
     pub file: String,
 }
 
@@ -26,12 +27,12 @@ impl Routes {
         }
     }
 
-    pub fn get_file(&self, path: &str) -> String {
+    pub fn get_file(&self, path: &str) -> Option<&Route> {
         for route in self.routes.iter() {
             if route.path == path {
-                return route.file.clone();
+                return Some(route);
             }
         }
-        "".to_string()
+        None
     }
 }

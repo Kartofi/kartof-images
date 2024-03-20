@@ -2,9 +2,10 @@ use std::{
     fs,
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
+    path::Path,
 };
 
-use crate::utils::format_response;
+use crate::utils::format_response::{self, Route};
 use crate::utils::{
     format_request::{self, Request},
     format_response::Routes,
@@ -35,23 +36,31 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
     if http_request.len() == 0 {
         return;
     }
+    println!("{}", http_request.join("\n"));
     let req: Request = format_request::format(http_request[0].to_string());
 
-    if req.path == "/" {
+    if let Some(route) = routes.get_file(&req.path) {
         let status_line = "HTTP/1.1 200 OK";
-        let contents = fs::read_to_string(routes.get_file(&req.path)).unwrap();
 
-        let length = contents.len();
+        let mut contents: Vec<u8> = Vec::new();
 
-        let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+        let content_type: &String = &route.content_type;
 
-        stream.write_all(response.as_bytes()).unwrap();
-    } else if req.path == "/image" {
-        let status_line = "HTTP/1.1 200 OK";
-        let contents = fs::read("ui/images.jpg").unwrap();
-
-        // Set the content type header to image/png
-        let content_type = "Content-Type: image/png";
+        if route.path != "/image" {
+            contents = fs::read(&route.file).unwrap();
+        } else {
+            if req.params.len() == 0 || req.params[0].name != "id" {
+                contents = fs::read("ui/no-image.png").unwrap();
+            } else {
+                let path = format!("{}{}.png", &route.file, req.params[0].value);
+                let img_path = Path::new(&path);
+                if img_path.exists() == true {
+                    contents = fs::read(img_path).unwrap();
+                } else {
+                    contents = fs::read("ui/no-image.png").unwrap();
+                }
+            }
+        }
 
         let length = contents.len();
 
