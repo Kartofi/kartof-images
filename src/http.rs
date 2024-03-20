@@ -1,9 +1,11 @@
 use std::{
-    fs,
+    clone,
+    fs::{self, File},
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
     path::Path,
 };
+use std::{thread, time};
 
 use crate::utils::format_response::{self, Route};
 use crate::utils::{
@@ -20,23 +22,51 @@ pub fn start() {
     routes.init("./src/routes".to_string());
 
     for stream in listener.incoming() {
-        let stream = stream.unwrap();
-
-        handle_connection(stream, &routes);
+        let clone = routes.clone();
+        thread::spawn(move || {
+            let stream = stream.unwrap();
+            handle_connection(stream, &clone);
+        });
     }
 }
 
 fn handle_connection(mut stream: TcpStream, routes: &Routes) {
-    let buf_reader = BufReader::new(&mut stream);
-    let http_request: Vec<_> = buf_reader
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
-    if http_request.len() == 0 {
+    let mut buf_reader = BufReader::new(&mut stream);
+    let mut http_request: Vec<String> = Vec::new();
+    loop {
+        let mut line = String::new();
+        buf_reader.read_line(&mut line).unwrap();
+        if line.trim().is_empty() {
+            break;
+        }
+        http_request.push(line);
+    }
+
+    if http_request.is_empty() {
         return;
     }
-    println!("{}", http_request.join("\n"));
+
+    // Assuming the request contains a multipart form data
+    let boundary = extract_boundary(&http_request);
+
+    if let Some(boundary) = boundary {
+        // Create a new file to write the uploaded data
+        let mut file = File::create("uploaded_file.png").unwrap();
+
+        // Read until the end of the boundary and write to file
+        let mut data = Vec::new();
+        buf_reader
+            .read_until_boundary(&mut data, boundary.as_bytes())
+            .unwrap();
+        // Skip over the headers
+        let content_start = data
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .unwrap_or(0);
+        data.drain(..content_start + 4);
+        file.write_all(&data).unwrap();
+    }
+
     let req: Request = format_request::format(http_request[0].to_string());
 
     if let Some(route) = routes.get_file(&req.path) {
@@ -83,5 +113,47 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
 
         let response = format!("{status_line}\r\n Content-Length: {length}\r\n\r\n{contents}");
         stream.write_all(&response.as_bytes()).unwrap();
+    }
+}
+// Function to extract boundary from the HTTP request
+fn extract_boundary(http_request: &Vec<String>) -> Option<String> {
+    for line in http_request {
+        if line.starts_with("Content-Type: multipart/form-data") {
+            if let Some(boundary_start) = line.find("boundary=") {
+                return Some("--".to_owned() + &line[boundary_start + "boundary=".len()..].trim());
+            }
+        }
+    }
+    None
+}
+
+// Extension trait to read until a specific boundary
+trait ReadUntilBoundary {
+    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, boundary: &[u8])
+        -> std::io::Result<usize>;
+}
+
+impl<R: Read> ReadUntilBoundary for BufReader<R> {
+    fn read_until_boundary(
+        &mut self,
+        buf: &mut Vec<u8>,
+        boundary: &[u8],
+    ) -> std::io::Result<usize> {
+        let mut read_buf = [0; 4096];
+        let mut bytes_read = 0;
+        loop {
+            let bytes = self.read(&mut read_buf)?;
+            if bytes == 0 {
+                break; // End of stream
+            }
+            buf.extend_from_slice(&read_buf[..bytes]);
+            bytes_read += bytes;
+
+            // Check if boundary is found
+            if buf.windows(boundary.len()).any(|window| window == boundary) {
+                break;
+            }
+        }
+        Ok(bytes_read)
     }
 }

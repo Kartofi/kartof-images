@@ -28,7 +28,7 @@ pub fn format(req: String) -> Request {
     }
     //Path
     let mut path_parts: Vec<&str> = parts[1].split("?").collect();
-
+    
     if path_parts.len() > 0 {
         result.path = path_parts[0].to_string();
 

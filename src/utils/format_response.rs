@@ -2,13 +2,13 @@ use std::{fs, ptr::null};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Route {
     pub path: String,
     pub content_type: String,
     pub file: String,
 }
-
+#[derive(Debug, Clone)]
 pub struct Routes {
     pub routes: Vec<Route>,
 }
