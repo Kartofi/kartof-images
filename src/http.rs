@@ -1,3 +1,10 @@
+use crate::utils::format_request::ReadUntilBoundary;
+use crate::utils::format_response::{self, Route};
+use crate::utils::manage_uploads;
+use crate::utils::{
+    format_request::{self, Request},
+    format_response::Routes,
+};
 use std::{
     clone,
     fs::{self, File},
@@ -7,11 +14,7 @@ use std::{
 };
 use std::{thread, time};
 
-use crate::utils::format_response::{self, Route};
-use crate::utils::{
-    format_request::{self, Request},
-    format_response::Routes,
-};
+static MAX_FILE_SIZE: usize = 20_000_000;
 
 pub fn start() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
@@ -42,21 +45,30 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
         http_request.push(line);
     }
 
-    if http_request.is_empty() {
-        return;
-    }
-
     // Assuming the request contains a multipart form data
-    let boundary = extract_boundary(&http_request);
+    let boundary = format_request::extract_boundary(&http_request);
+    let length = format_request::extract_length(&http_request);
 
     if let Some(boundary) = boundary {
+        if let Some(length) = length {
+            if length > MAX_FILE_SIZE {
+                let contents = fs::read_to_string("ui/not_found.html").unwrap();
+                send_code(stream, contents, "200 OK".to_string());
+                return;
+            }
+        } else {
+            let contents = fs::read_to_string("ui/not_found.html").unwrap();
+            send_code(stream, contents, "200 OK".to_string());
+            return;
+        }
+        let id = manage_uploads::get_id();
         // Create a new file to write the uploaded data
-        let mut file = File::create("uploaded_file.png").unwrap();
+        let mut file = File::create(format!("images/{}.png", id)).unwrap();
 
         // Read until the end of the boundary and write to file
         let mut data = Vec::new();
         buf_reader
-            .read_until_boundary(&mut data, boundary.as_bytes())
+            .read_until_boundary(&mut data, length.unwrap())
             .unwrap();
         // Skip over the headers
         let content_start = data
@@ -65,8 +77,15 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
             .unwrap_or(0);
         data.drain(..content_start + 4);
         file.write_all(&data).unwrap();
+
+        let contents = format!("http://localhost:7878/image?id={}", id);
+        send_code(stream, contents, "200 OK".to_string());
+        return;
     }
 
+    if http_request.is_empty() {
+        return;
+    }
     let req: Request = format_request::format(http_request[0].to_string());
 
     if let Some(route) = routes.get_file(&req.path) {
@@ -106,54 +125,16 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
         // Write the PNG content
         stream.write_all(&contents).unwrap();
     } else {
-        let status_line = "HTTP/1.1 404 Not Found";
-
         let contents = fs::read_to_string("ui/not_found.html").unwrap();
-        let length = contents.len();
-
-        let response = format!("{status_line}\r\n Content-Length: {length}\r\n\r\n{contents}");
-        stream.write_all(&response.as_bytes()).unwrap();
+        send_code(stream, contents, "200 OK".to_string());
     }
 }
 // Function to extract boundary from the HTTP request
-fn extract_boundary(http_request: &Vec<String>) -> Option<String> {
-    for line in http_request {
-        if line.starts_with("Content-Type: multipart/form-data") {
-            if let Some(boundary_start) = line.find("boundary=") {
-                return Some("--".to_owned() + &line[boundary_start + "boundary=".len()..].trim());
-            }
-        }
-    }
-    None
-}
+fn send_code(mut stream: TcpStream, reason: String, code: String) {
+    let status_line = "HTTP/1.1 ";
 
-// Extension trait to read until a specific boundary
-trait ReadUntilBoundary {
-    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, boundary: &[u8])
-        -> std::io::Result<usize>;
-}
+    let length_ = reason.len();
 
-impl<R: Read> ReadUntilBoundary for BufReader<R> {
-    fn read_until_boundary(
-        &mut self,
-        buf: &mut Vec<u8>,
-        boundary: &[u8],
-    ) -> std::io::Result<usize> {
-        let mut read_buf = [0; 4096];
-        let mut bytes_read = 0;
-        loop {
-            let bytes = self.read(&mut read_buf)?;
-            if bytes == 0 {
-                break; // End of stream
-            }
-            buf.extend_from_slice(&read_buf[..bytes]);
-            bytes_read += bytes;
-
-            // Check if boundary is found
-            if buf.windows(boundary.len()).any(|window| window == boundary) {
-                break;
-            }
-        }
-        Ok(bytes_read)
-    }
+    let response = format!("{status_line}{code}\r\n Content-Length: {length_}\r\n\r\n{reason}");
+    stream.write_all(&response.as_bytes()).unwrap();
 }

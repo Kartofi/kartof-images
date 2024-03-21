@@ -1,3 +1,5 @@
+use std::io::{BufReader, Read};
+
 enum ReqType {
     GET = 1,
     POST = 2,
@@ -28,7 +30,7 @@ pub fn format(req: String) -> Request {
     }
     //Path
     let mut path_parts: Vec<&str> = parts[1].split("?").collect();
-    
+
     if path_parts.len() > 0 {
         result.path = path_parts[0].to_string();
 
@@ -53,4 +55,61 @@ pub fn format(req: String) -> Request {
     }
 
     return result;
+}
+
+//Forms
+pub fn extract_boundary(http_request: &Vec<String>) -> Option<String> {
+    for line in http_request {
+        if line.starts_with("Content-Type: multipart/form-data") {
+            if let Some(boundary_start) = line.find("boundary=") {
+                return Some("--".to_owned() + &line[boundary_start + "boundary=".len()..].trim());
+            }
+        }
+    }
+    None
+}
+pub fn extract_length(http_request: &Vec<String>) -> Option<usize> {
+    for line in http_request {
+        if line.starts_with("Content-Length") {
+            let split: Vec<&str> = line.split(": ").collect();
+
+            // Ensure there are enough parts after splitting
+            if split.len() >= 2 {
+                // Attempt to parse and trim the second part
+                if let Ok(parsed_value) = split[1].trim().parse() {
+                    return Some(parsed_value);
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+    None
+}
+// Extension trait to read until a specific boundary
+pub trait ReadUntilBoundary {
+    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize>;
+}
+
+impl<R: Read> ReadUntilBoundary for BufReader<R> {
+    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize> {
+        let mut read_buf = [0; 4096];
+        let mut bytes_read = 0;
+        loop {
+            let bytes = self.read(&mut read_buf)?;
+            if bytes == 0 {
+                break; // End of stream
+            }
+            buf.extend_from_slice(&read_buf[..bytes]);
+            bytes_read += bytes;
+
+            // Check if boundary is found
+            if bytes_read >= length {
+                break;
+            }
+        }
+        Ok(bytes_read)
+    }
 }

@@ -5,11 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
   </head>
-  <body>
-    <form action="/" method="post" enctype="multipart/form-data">
-      <label for="file">Upload File:</label>
-      <input type="file" id="file" name="file" required /><br /><br />
-      <input type="submit" value="Upload File" />
+  <script>
+    async function load() {
+      let form = document.getElementById("uploadForm");
+      let inpFile = document.getElementById("inpFile");
+
+      let url = document.getElementById("img-url");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (inpFile.files.length == 0) {
+          window.alert("Please select one image before clicking upload!");
+          return;
+        }
+        if (inpFile.files[0].size > 20_000_000) {
+          window.alert("File is too large max file size is 20MB!");
+          return;
+        }
+
+        const formData = new FormData();
+
+        formData.append("inpFile", inpFile.files[0]);
+
+        let data = await fetch("/upload", {
+          method: "POST",
+          body: formData,
+        }).catch(function (error) {
+          window.alert("Error uploading file!");
+          return;
+        });
+
+        let text = await data.text();
+        url.innerHTML =
+          "Your image url is <a href='" +
+          text +
+          "'>" +
+          text +
+          "</a> <br /> <br />";
+        window.alert("Successfully uploaded image!");
+      });
+    }
+  </script>
+  <body onload="load()">
+    <a id="img-url"></a>
+
+    <form ref="uploadForm" id="uploadForm" enctype="multipart/form-data">
+      <input
+        type="file"
+        name="sampleFile"
+        id="inpFile"
+        accept="image/png, image/gif, image/jpeg"
+      />
+      <input type="submit" value="Submit" />
     </form>
   </body>
 </html>
