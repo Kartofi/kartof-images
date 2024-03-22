@@ -1,6 +1,6 @@
 <center><b><h1>Kartof Images</h1></b></center>
 
-<b>Kartof Images</b> is my first REAL rust project made using only one crate - serder_json and ofc the included libs in rust. I wrote the whole http server by hand so the security will probably be not so good.<br> In short terms this is a image host website where you upload an image and you get the url of it.😁
+<b>Kartof Images</b> is my first REAL rust project made using only one crate - serde_json and ofc the included libs in rust. I wrote the whole http server by hand so the security will probably be not so good.<br> In short terms this is a image host website where you upload an image and you get the url of it.😁
 
 <br><br>
 
