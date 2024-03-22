@@ -1,10 +1,11 @@
-use crate::utils::format_request::ReadUntilBoundary;
+use crate::utils::format_request::{ReadUntilBoundary, ReqType};
 use crate::utils::format_response::{self, Route};
-use crate::utils::manage_uploads;
+use crate::utils::manage_uploads::{self, handle_upload};
 use crate::utils::{
     format_request::{self, Request},
     format_response::Routes,
 };
+use std::borrow::BorrowMut;
 use std::{
     clone,
     fs::{self, File},
@@ -14,7 +15,7 @@ use std::{
 };
 use std::{thread, time};
 
-static MAX_FILE_SIZE: usize = 20_000_000;
+pub static MAX_FILE_SIZE: usize = 20_000_000;
 
 pub fn start() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
@@ -34,7 +35,8 @@ pub fn start() {
 }
 
 fn handle_connection(mut stream: TcpStream, routes: &Routes) {
-    let mut buf_reader = BufReader::new(&mut stream);
+    let clone_stream = stream.try_clone().unwrap();
+    let mut buf_reader: BufReader<&mut TcpStream> = BufReader::new(&mut stream);
     let mut http_request: Vec<String> = Vec::new();
     loop {
         let mut line = String::new();
@@ -45,50 +47,13 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
         http_request.push(line);
     }
 
-    // Assuming the request contains a multipart form data
-    let boundary = format_request::extract_boundary(&http_request);
-    let length = format_request::extract_length(&http_request);
-
-    if let Some(boundary) = boundary {
-        if let Some(length) = length {
-            if length > MAX_FILE_SIZE {
-                let contents = fs::read_to_string("ui/not_found.html").unwrap();
-                send_code(stream, contents, "200 OK".to_string());
-                return;
-            }
-        } else {
-            let contents = fs::read_to_string("ui/not_found.html").unwrap();
-            send_code(stream, contents, "200 OK".to_string());
-            return;
-        }
-        let id = manage_uploads::get_id();
-        // Create a new file to write the uploaded data
-        let mut file = File::create(format!("images/{}.png", id)).unwrap();
-
-        // Read until the end of the boundary and write to file
-        let mut data = Vec::new();
-        buf_reader
-            .read_until_boundary(&mut data, length.unwrap())
-            .unwrap();
-        // Skip over the headers
-        let content_start = data
-            .windows(4)
-            .position(|window| window == b"\r\n\r\n")
-            .unwrap_or(0);
-        data.drain(..content_start + 4);
-        file.write_all(&data).unwrap();
-
-        let contents = format!("http://localhost:7878/image?id={}", id);
-        send_code(stream, contents, "200 OK".to_string());
-        return;
-    }
-
     if http_request.is_empty() {
         return;
     }
     let req: Request = format_request::format(http_request[0].to_string());
+    let isize_req: isize = req.req_type.into();
 
-    if let Some(route) = routes.get_file(&req.path) {
+    if let Some(route) = routes.get_file(&req.path, isize_req) {
         let status_line = "HTTP/1.1 200 OK";
 
         let mut contents: Vec<u8> = Vec::new();
@@ -125,12 +90,18 @@ fn handle_connection(mut stream: TcpStream, routes: &Routes) {
         // Write the PNG content
         stream.write_all(&contents).unwrap();
     } else {
-        let contents = fs::read_to_string("ui/not_found.html").unwrap();
-        send_code(stream, contents, "200 OK".to_string());
+        let post_req: isize = ReqType::POST.into();
+        if req.path == "/upload" && isize_req == post_req {
+            manage_uploads::handle_upload(buf_reader, clone_stream, http_request);
+            return;
+        } else {
+            let contents = fs::read_to_string("ui/not_found.html").unwrap();
+            send_code(&stream, contents, "200 OK".to_string());
+        }
     }
 }
-// Function to extract boundary from the HTTP request
-fn send_code(mut stream: TcpStream, reason: String, code: String) {
+
+pub fn send_code(mut stream: &TcpStream, reason: String, code: String) {
     let status_line = "HTTP/1.1 ";
 
     let length_ = reason.len();

@@ -1,5 +1,6 @@
 {
   "path": "/image",
+  "method": 1,
   "content_type": "image/png",
   "file": "images/"
 }

@@ -1,9 +1,19 @@
 use std::io::{BufReader, Read};
 
-enum ReqType {
+#[derive(Debug, Clone)]
+pub enum ReqType {
     GET = 1,
     POST = 2,
     OTHER = 3,
+}
+impl From<ReqType> for isize {
+    fn from(value: ReqType) -> isize {
+        match value {
+            ReqType::GET => 1,
+            ReqType::POST => 2,
+            ReqType::OTHER => 3,
+        }
+    }
 }
 pub struct Param {
     pub name: String,
@@ -90,11 +100,11 @@ pub fn extract_length(http_request: &Vec<String>) -> Option<usize> {
 }
 // Extension trait to read until a specific boundary
 pub trait ReadUntilBoundary {
-    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize>;
+    fn read_length(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize>;
 }
 
 impl<R: Read> ReadUntilBoundary for BufReader<R> {
-    fn read_until_boundary(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize> {
+    fn read_length(&mut self, buf: &mut Vec<u8>, length: usize) -> std::io::Result<usize> {
         let mut read_buf = [0; 4096];
         let mut bytes_read = 0;
         loop {

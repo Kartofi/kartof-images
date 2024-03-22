@@ -1,5 +1,6 @@
 {
   "path": "/",
+  "method": 1,
   "content_type": "text/html",
   "file": "ui/index.html"
 }
