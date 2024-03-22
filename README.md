@@ -7,6 +7,7 @@
 <p aling="center"><img width="600px" src="./GitImages/screenshot.png"></p>
 <br>
 (the ui is bad i know but the main focus is the rust back-end)
+
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
